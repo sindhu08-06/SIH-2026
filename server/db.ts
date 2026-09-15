@@ -1,19 +1,41 @@
 import { DatabaseSync } from 'node:sqlite';
 import path from 'node:path';
 import fs from 'node:fs';
+import os from 'node:os';
 import crypto from 'node:crypto';
 
-// Ensure data directory exists
-const dataDir = path.join(process.cwd(), 'data');
-if (!fs.existsSync(dataDir)) {
-  fs.mkdirSync(dataDir, { recursive: true });
+// In serverless environments like Vercel, process.cwd() is read-only.
+// We store runtime SQLite databases in os.tmpdir() or fallback to memory.
+const isServerless = Boolean(
+  process.env.VERCEL ||
+  process.env.AWS_LAMBDA_FUNCTION_NAME ||
+  process.env.LAMBDA_TASK_ROOT ||
+  process.env.NODE_ENV === 'test'
+);
+
+const dataDir = isServerless ? path.join(os.tmpdir(), 'sahakar_data') : path.join(process.cwd(), 'data');
+
+let databaseInstance: DatabaseSync;
+try {
+  if (!fs.existsSync(dataDir)) {
+    fs.mkdirSync(dataDir, { recursive: true });
+  }
+  const dbPath = path.join(dataDir, 'sahakar_seva.db');
+  databaseInstance = new DatabaseSync(dbPath);
+} catch (err) {
+  console.warn('Notice: SQLite directory creation or file open fallback to in-memory SQLite:', err);
+  databaseInstance = new DatabaseSync(':memory:');
 }
 
-const dbPath = path.join(dataDir, 'sahakar_seva.db');
-export const db = new DatabaseSync(dbPath);
+export const db = databaseInstance;
+
+let isDbInitialized = false;
 
 // Initialize schema
-export function initDatabase() {
+export function initDatabase(force = false) {
+  if (isDbInitialized && !force) {
+    return;
+  }
   db.exec(`
     CREATE TABLE IF NOT EXISTS users (
       id TEXT PRIMARY KEY,
@@ -173,6 +195,8 @@ export function initDatabase() {
     INSERT OR IGNORE INTO users (id, email, phone, name, role, password_hash, salt, created_at)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?)
   `).run(custId, 'customer@sahakar.coop', '+919822481092', 'Teja Reddy', 'customer', custHashedPw, custSalt, now);
+
+  isDbInitialized = true;
 }
 
 function hashPassword(password: string, salt: string): string {
