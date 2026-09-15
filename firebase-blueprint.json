@@ -1,0 +1,65 @@
+{
+  "entities": {
+    "users": {
+      "title": "User Profiles & Roles",
+      "description": "User profile with cooperative role (admin, worker, customer)",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "email": { "type": "string" },
+        "name": { "type": "string" },
+        "phone": { "type": "string" },
+        "role": { "type": "string", "enum": ["admin", "worker", "customer"] },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["uid", "email", "role"]
+    },
+    "bookings": {
+      "title": "Service Bookings",
+      "description": "Customer bookings for cooperative services",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "customerName": { "type": "string" },
+        "customerPhone": { "type": "string" },
+        "serviceCategory": { "type": "string" },
+        "title": { "type": "string" },
+        "status": { "type": "string" },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["id", "serviceCategory", "status"]
+    },
+    "workers": {
+      "title": "Artisan Worker Profiles",
+      "description": "Registered cooperative worker profile and verification status",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "primarySkill": { "type": "string" },
+        "verificationStatus": { "type": "string", "enum": ["verified", "under_review", "pending", "rejected"] },
+        "rating": { "type": "number" },
+        "city": { "type": "string" }
+      },
+      "required": ["id", "name", "primarySkill", "verificationStatus"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": { "$ref": "#/entities/users" },
+      "description": "Registered user accounts and credentials"
+    },
+    "/bookings/{bookingId}": {
+      "schema": { "$ref": "#/entities/bookings" },
+      "description": "Cooperative service orders and dispatch statuses"
+    },
+    "/workers/{workerId}": {
+      "schema": { "$ref": "#/entities/workers" },
+      "description": "Cooperative member artisans and credentials"
+    },
+    "/test/{testId}": {
+      "schema": "string",
+      "description": "Connection test doc"
+    }
+  }
+}

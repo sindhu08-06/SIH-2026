@@ -1,0 +1,10 @@
+{
+  "name": "2Remix Remix Sahakar Seva — Cooperative Digital Service Marketplace",
+  "description": "Cooperative federation platform for managing, verifying, and geo-matching skilled service workers with transparent payouts, welfare support, and AI demand forecasting.",
+  "requestFramePermissions": [
+    "geolocation"
+  ],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

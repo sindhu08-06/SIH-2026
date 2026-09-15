@@ -1,0 +1,189 @@
+import { initializeApp, getApps, getApp } from 'firebase/app';
+import {
+  getAuth,
+  GoogleAuthProvider,
+  signInWithPopup,
+  signOut as fbSignOut,
+  User as FirebaseUser,
+} from 'firebase/auth';
+import {
+  initializeFirestore,
+  getFirestore,
+  setLogLevel,
+  doc,
+  setDoc,
+  getDoc,
+  collection,
+  onSnapshot,
+} from 'firebase/firestore';
+import firebaseConfig from '../../firebase-applet-config.json';
+
+const app = !getApps().length ? initializeApp(firebaseConfig) : getApp();
+export const auth = getAuth(app);
+
+// Silence non-fatal transient network/reconnecting logs in sandboxed iframe runtime
+try {
+  setLogLevel('error');
+} catch {
+  // ignore
+}
+
+let firestoreDb: ReturnType<typeof getFirestore>;
+try {
+  firestoreDb = initializeFirestore(
+    app,
+    {
+      experimentalAutoDetectLongPolling: true,
+    },
+    firebaseConfig.firestoreDatabaseId || undefined
+  );
+} catch {
+  firestoreDb = getFirestore(app, firebaseConfig.firestoreDatabaseId || undefined);
+}
+export const db = firestoreDb;
+
+export enum OperationType {
+  CREATE = 'create',
+  UPDATE = 'update',
+  DELETE = 'delete',
+  LIST = 'list',
+  GET = 'get',
+  WRITE = 'write',
+}
+
+export interface FirestoreErrorInfo {
+  error: string;
+  operationType: OperationType;
+  path: string | null;
+  authInfo: {
+    userId?: string | null;
+    email?: string | null;
+    emailVerified?: boolean | null;
+    isAnonymous?: boolean | null;
+    tenantId?: string | null;
+    providerInfo?: {
+      providerId?: string | null;
+      email?: string | null;
+    }[];
+  };
+}
+
+export function handleFirestoreError(error: unknown, operationType: OperationType, path: string | null): never {
+  const errInfo: FirestoreErrorInfo = {
+    error: error instanceof Error ? error.message : String(error),
+    authInfo: {
+      userId: auth.currentUser?.uid,
+      email: auth.currentUser?.email,
+      emailVerified: auth.currentUser?.emailVerified,
+      isAnonymous: auth.currentUser?.isAnonymous,
+      tenantId: auth.currentUser?.tenantId,
+      providerInfo: auth.currentUser?.providerData?.map(provider => ({
+        providerId: provider.providerId,
+        email: provider.email,
+      })) || [],
+    },
+    operationType,
+    path,
+  };
+  console.error('Firestore Error: ', JSON.stringify(errInfo));
+  throw new Error(JSON.stringify(errInfo));
+}
+
+// Optional connection probe conforming to Firebase Skill guidelines
+export async function testConnection() {
+  try {
+    await getDoc(doc(db, 'test', 'connection'));
+  } catch (error: any) {
+    if (
+      error?.code === 'unavailable' ||
+      error?.message?.includes('offline') ||
+      error?.message?.includes('unavailable')
+    ) {
+      console.warn('Firebase operating in offline / fallback mode.');
+    }
+  }
+}
+
+// Google Auth Provider setup with forced account selection
+export const googleProvider = new GoogleAuthProvider();
+googleProvider.setCustomParameters({
+  prompt: 'select_account',
+});
+
+export interface AppUserProfile {
+  uid: string;
+  email: string;
+  name: string;
+  photoURL?: string;
+  role: 'admin' | 'worker' | 'customer';
+  phone?: string;
+  primarySkill?: string;
+  workerId?: string;
+  lastLoginAt: string;
+  createdAt?: string;
+}
+
+/**
+ * Universal Google Sign-In for all roles (Customer, Worker, Admin)
+ * Authenticates via Firebase GoogleAuthProvider, syncs profile to Firestore 'users' collection,
+ * and returns the authenticated user + stored role profile.
+ */
+export async function signInWithGoogle(
+  intendedRole: 'admin' | 'worker' | 'customer' = 'customer',
+  additionalData?: Partial<AppUserProfile>
+): Promise<{ user: FirebaseUser; profile: AppUserProfile }> {
+  const result = await signInWithPopup(auth, googleProvider);
+  const user = result.user;
+
+  const email = user.email || `${user.uid}@sahakar.coop`;
+  const name = user.displayName || user.email?.split('@')[0] || 'Cooperative Member';
+  const photoURL = user.photoURL || undefined;
+
+  // Check existing Firestore record or create fresh profile
+  const userDocRef = doc(db, 'users', user.uid);
+  let existingProfile: Partial<AppUserProfile> = {};
+
+  try {
+    const snap = await getDoc(userDocRef);
+    if (snap.exists()) {
+      existingProfile = snap.data() as AppUserProfile;
+    }
+  } catch (readErr) {
+    console.warn('Firestore read note during Google Auth:', readErr);
+  }
+
+  // Preserve existing role if already an admin/worker, unless user is explicitly authenticating as that role
+  const finalRole: 'admin' | 'worker' | 'customer' =
+    existingProfile.role || intendedRole;
+
+  const profile: AppUserProfile = {
+    uid: user.uid,
+    email,
+    name: existingProfile.name || name,
+    photoURL: existingProfile.photoURL || photoURL,
+    role: finalRole,
+    phone: existingProfile.phone || user.phoneNumber || additionalData?.phone || '',
+    primarySkill: existingProfile.primarySkill || additionalData?.primarySkill,
+    workerId: existingProfile.workerId || additionalData?.workerId,
+    lastLoginAt: new Date().toISOString(),
+    createdAt: existingProfile.createdAt || new Date().toISOString(),
+    ...additionalData,
+  };
+
+  try {
+    await setDoc(userDocRef, profile, { merge: true });
+  } catch (writeErr) {
+    console.warn('Firestore user write note during Google Auth:', writeErr);
+  }
+
+  return { user, profile };
+}
+
+/**
+ * Universal Sign-Out
+ */
+export async function signOutFirebase(): Promise<void> {
+  await fbSignOut(auth);
+}
+
+export default app;
