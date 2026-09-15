@@ -41,6 +41,7 @@ import {
   getAuthToken,
   removeAuthToken,
 } from './services/api';
+import { onFirebaseAuthStateChanged } from './services/firebase';
 
 function mapApiWorkerToProfile(w: ApiWorker): WorkerProfile {
   return {
@@ -249,6 +250,23 @@ export default function App() {
   useEffect(() => {
     syncDatabaseData();
   }, [syncDatabaseData]);
+
+  // Sync Firebase authentication state
+  useEffect(() => {
+    const unsubscribe = onFirebaseAuthStateChanged((user, profile) => {
+      if (user && profile) {
+        if (profile.role === 'admin') {
+          setAdminUser({
+            email: profile.email,
+            name: profile.name,
+            photoURL: profile.photoURL,
+            uid: profile.uid,
+          });
+        }
+      }
+    });
+    return () => unsubscribe();
+  }, []);
 
   // Find active worker for worker dashboard with fallback
   const currentWorker: WorkerProfile =

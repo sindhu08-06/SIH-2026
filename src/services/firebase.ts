@@ -4,6 +4,7 @@ import {
   GoogleAuthProvider,
   signInWithPopup,
   signOut as fbSignOut,
+  onAuthStateChanged,
   User as FirebaseUser,
 } from 'firebase/auth';
 import {
@@ -184,6 +185,37 @@ export async function signInWithGoogle(
  */
 export async function signOutFirebase(): Promise<void> {
   await fbSignOut(auth);
+}
+
+/**
+ * Fetch AppUserProfile for a given UID from Firestore 'users' collection
+ */
+export async function getUserProfile(uid: string): Promise<AppUserProfile | null> {
+  try {
+    const snap = await getDoc(doc(db, 'users', uid));
+    if (snap.exists()) {
+      return snap.data() as AppUserProfile;
+    }
+  } catch (err) {
+    console.warn('Failed to retrieve user profile from Firestore:', err);
+  }
+  return null;
+}
+
+/**
+ * Listen to Firebase Authentication state changes and automatically fetch their Firestore profile
+ */
+export function onFirebaseAuthStateChanged(
+  callback: (user: FirebaseUser | null, profile: AppUserProfile | null) => void
+) {
+  return onAuthStateChanged(auth, async (user) => {
+    if (user) {
+      const profile = await getUserProfile(user.uid);
+      callback(user, profile);
+    } else {
+      callback(null, null);
+    }
+  });
 }
 
 export default app;

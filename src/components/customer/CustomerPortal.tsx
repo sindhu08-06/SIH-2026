@@ -32,7 +32,7 @@ import { DetectedLocation } from '../../hooks/useLocation';
 import { ApiWorker, ApiBooking, api } from '../../services/api';
 import { calculateDistanceKm, estimateTravelTimeMinutes } from '../../utils/geo';
 import { Language, WorkerProfile } from '../../types';
-import { auth, signInWithGoogle, signOutFirebase } from '../../services/firebase';
+import { auth, signInWithGoogle, signOutFirebase, onFirebaseAuthStateChanged } from '../../services/firebase';
 import { GoogleIcon } from '../common/GoogleIcon';
 import { CustomerRealtimeRadarMap } from './CustomerRealtimeRadarMap';
 import { WorkerRatingModal } from '../common/WorkerRatingModal';
@@ -215,6 +215,26 @@ export const CustomerPortal: React.FC<CustomerPortalProps> = ({
     localStorage.removeItem('sahakar_customer_user');
     setCustomerUser(null);
   };
+
+  // Listen to Firebase Auth state changes
+  useEffect(() => {
+    const unsubscribe = onFirebaseAuthStateChanged((user, profile) => {
+      if (user) {
+        const userData = {
+          name: profile?.name || user.displayName || 'Verified Customer',
+          email: profile?.email || user.email || '',
+          photoURL: profile?.photoURL || user.photoURL || undefined,
+          uid: user.uid,
+        };
+        setCustomerUser(userData);
+        setFormData((prev) => ({
+          ...prev,
+          name: userData.name,
+        }));
+      }
+    });
+    return () => unsubscribe();
+  }, []);
 
   // Sync address if location updates
   useEffect(() => {
