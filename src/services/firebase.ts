@@ -125,6 +125,74 @@ export interface AppUserProfile {
 }
 
 /**
+ * Helper to get the current hostname for Firebase Authorized Domains whitelist
+ */
+export function getCurrentHostname(): string {
+  if (typeof window !== 'undefined' && window.location) {
+    return window.location.hostname;
+  }
+  return '';
+}
+
+export interface FriendlyAuthError {
+  isUnauthorizedDomain: boolean;
+  domain: string;
+  projectId: string;
+  message: string;
+  solutionTip?: string;
+}
+
+/**
+ * Parses Firebase Auth errors into actionable, user-friendly details
+ */
+export function formatFirebaseAuthError(error: any): FriendlyAuthError {
+  const domain = getCurrentHostname();
+  const projectId = firebaseConfig.projectId || 'gen-lang-client-0694832781';
+  const errorCode = error?.code || '';
+  const errorMsg = error?.message || '';
+
+  const isUnauthorizedDomain =
+    errorCode === 'auth/unauthorized-domain' ||
+    errorMsg.includes('unauthorized-domain') ||
+    errorMsg.includes('unauthorized domain');
+
+  if (isUnauthorizedDomain) {
+    return {
+      isUnauthorizedDomain: true,
+      domain,
+      projectId,
+      message: `The domain "${domain}" is not authorized for Google Sign-In in Firebase.`,
+      solutionTip: `Add "${domain}" to Firebase Console → Authentication → Settings → Authorized domains (Project: ${projectId}). Or sign in immediately using Email/Phone credentials below.`,
+    };
+  }
+
+  if (errorCode === 'auth/popup-closed-by-user' || errorMsg.includes('closed-by-user')) {
+    return {
+      isUnauthorizedDomain: false,
+      domain,
+      projectId,
+      message: 'Sign-in popup was closed before completing. Please try again or use the form below.',
+    };
+  }
+
+  if (errorCode === 'auth/popup-blocked' || errorMsg.includes('popup-blocked')) {
+    return {
+      isUnauthorizedDomain: false,
+      domain,
+      projectId,
+      message: 'Pop-up was blocked by your browser. Please allow pop-ups for this site or use the form below.',
+    };
+  }
+
+  return {
+    isUnauthorizedDomain: false,
+    domain,
+    projectId,
+    message: errorMsg || 'Authentication could not be completed.',
+  };
+}
+
+/**
  * Universal Google Sign-In for all roles (Customer, Worker, Admin)
  * Authenticates via Firebase GoogleAuthProvider, syncs profile to Firestore 'users' collection,
  * and returns the authenticated user + stored role profile.

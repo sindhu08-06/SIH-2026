@@ -8,6 +8,8 @@ import crypto from 'node:crypto';
 // We store runtime SQLite databases in os.tmpdir() or fallback to memory.
 const isServerless = Boolean(
   process.env.VERCEL ||
+  process.env.NETLIFY ||
+  process.env.NETLIFY_DEV ||
   process.env.AWS_LAMBDA_FUNCTION_NAME ||
   process.env.LAMBDA_TASK_ROOT ||
   process.env.NODE_ENV === 'test'

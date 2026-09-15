@@ -20,7 +20,8 @@ import {
   signInWithEmailAndPassword,
   createUserWithEmailAndPassword,
 } from 'firebase/auth';
-import { auth, db, signInWithGoogle } from '../../services/firebase';
+import { auth, db, signInWithGoogle, formatFirebaseAuthError } from '../../services/firebase';
+import { FirebaseDomainHelper } from './FirebaseDomainHelper';
 import { doc, setDoc } from 'firebase/firestore';
 import { api, setAuthToken } from '../../services/api';
 import { GoogleIcon } from './GoogleIcon';
@@ -43,6 +44,7 @@ export const AdminAuthModal: React.FC<AdminAuthModalProps> = ({
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [authSuccessMsg, setAuthSuccessMsg] = useState<string | null>(null);
+  const [showDomainHelper, setShowDomainHelper] = useState(false);
 
   if (!isOpen) return null;
 
@@ -51,6 +53,7 @@ export const AdminAuthModal: React.FC<AdminAuthModalProps> = ({
     setLoading(true);
     setErrorMsg(null);
     setAuthSuccessMsg(null);
+    setShowDomainHelper(false);
 
     try {
       const { user, profile } = await signInWithGoogle('admin', {
@@ -79,25 +82,25 @@ export const AdminAuthModal: React.FC<AdminAuthModalProps> = ({
         onClose();
       }, 700);
     } catch (err: any) {
-      if (
-        err?.code === 'auth/popup-closed-by-user' ||
-        err?.message?.includes('closed-by-user') ||
-        err?.code === 'auth/cancelled-popup-request'
-      ) {
-        console.warn('Admin Google sign-in was closed by user.');
-        setErrorMsg('Sign-in cancelled. Please click Google Sign In again or use Admin email & password below.');
-        return;
-      }
-      if (err?.code === 'auth/popup-blocked' || err?.message?.includes('popup-blocked')) {
-        console.warn('Admin Google sign-in popup blocked.');
-        setErrorMsg('Pop-up was blocked by browser. Please allow popups or use Admin email & password below.');
-        return;
-      }
       console.warn('Google Admin Login notice:', err);
-      setErrorMsg(err.message || 'Google sign-in could not be completed.');
+      const friendly = formatFirebaseAuthError(err);
+      if (friendly.isUnauthorizedDomain) {
+        setShowDomainHelper(true);
+        setErrorMsg(null);
+      } else {
+        setErrorMsg(friendly.message);
+      }
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleSwitchToDemoPassword = () => {
+    setAuthMode('password');
+    setEmail('admin@sahakar.coop');
+    setPassword('coop1234');
+    setErrorMsg(null);
+    setShowDomainHelper(false);
   };
 
   // 2. Email & Password Admin Login
@@ -267,6 +270,13 @@ export const AdminAuthModal: React.FC<AdminAuthModalProps> = ({
         {/* Content Body */}
         <div className="p-6 space-y-4">
           
+          {showDomainHelper && (
+            <FirebaseDomainHelper
+              onBypass={handleSwitchToDemoPassword}
+              bypassLabel="Switch to Officer Credentials (admin@sahakar.coop)"
+            />
+          )}
+
           {errorMsg && (
             <div className="p-3.5 rounded-2xl bg-rose-50 border border-rose-200 text-xs text-rose-700 flex items-start gap-2.5">
               <AlertCircle className="w-4 h-4 shrink-0 mt-0.5 text-rose-500" />

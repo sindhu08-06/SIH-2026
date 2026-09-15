@@ -14,7 +14,8 @@ import {
   KeyRound,
 } from 'lucide-react';
 import { GoogleIcon } from '../common/GoogleIcon';
-import { signInWithGoogle } from '../../services/firebase';
+import { signInWithGoogle, formatFirebaseAuthError } from '../../services/firebase';
+import { FirebaseDomainHelper } from '../common/FirebaseDomainHelper';
 import { api, AuthUser, setAuthToken } from '../../services/api';
 import { Language } from '../../types';
 
@@ -40,6 +41,7 @@ export const CustomerAuthModal: React.FC<CustomerAuthModalProps> = ({
   const [isGoogleLoading, setIsGoogleLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
+  const [showDomainHelper, setShowDomainHelper] = useState(false);
 
   if (!isOpen) return null;
 
@@ -47,6 +49,7 @@ export const CustomerAuthModal: React.FC<CustomerAuthModalProps> = ({
     setIsGoogleLoading(true);
     setErrorMsg(null);
     setSuccessMsg(null);
+    setShowDomainHelper(false);
     try {
       const res = await signInWithGoogle('customer', {
         role: 'customer',
@@ -69,12 +72,12 @@ export const CustomerAuthModal: React.FC<CustomerAuthModalProps> = ({
       }
     } catch (err: any) {
       console.warn('Google Sign In notice:', err);
-      if (err?.code === 'auth/popup-closed-by-user' || err?.message?.includes('closed-by-user')) {
-        setErrorMsg('Google sign-in popup was closed before finishing. You can retry or use the Mobile/Email form below.');
-      } else if (err?.code === 'auth/popup-blocked' || err?.message?.includes('popup-blocked')) {
-        setErrorMsg('Pop-up was blocked by browser. Please enable pop-ups or use the Mobile/Email form below.');
+      const friendly = formatFirebaseAuthError(err);
+      if (friendly.isUnauthorizedDomain) {
+        setShowDomainHelper(true);
+        setErrorMsg(null);
       } else {
-        setErrorMsg(err.message || 'Google Sign In could not be completed. Please try Mobile/Email login.');
+        setErrorMsg(friendly.message);
       }
     } finally {
       setIsGoogleLoading(false);
@@ -82,9 +85,11 @@ export const CustomerAuthModal: React.FC<CustomerAuthModalProps> = ({
   };
 
   const handleFillDemo = () => {
+    setMode('login');
     setEmailOrPhone('customer@sahakar.coop');
     setPassword('customer123');
     setErrorMsg(null);
+    setShowDomainHelper(false);
   };
 
   const handleEmailPasswordSubmit = async (e: React.FormEvent) => {
@@ -232,6 +237,12 @@ export const CustomerAuthModal: React.FC<CustomerAuthModalProps> = ({
         {/* Modal Content - Merged Single Section */}
         <div className="p-6 pt-4 space-y-4">
           {/* Notifications */}
+          {showDomainHelper && (
+            <FirebaseDomainHelper
+              onBypass={handleFillDemo}
+              bypassLabel="Sign in with Customer Demo Account"
+            />
+          )}
           {errorMsg && (
             <div className="p-3 rounded-2xl bg-rose-50 border border-rose-200 text-rose-800 text-xs flex items-start gap-2 animate-in fade-in">
               <AlertCircle className="w-4 h-4 shrink-0 text-rose-600 mt-0.5" />

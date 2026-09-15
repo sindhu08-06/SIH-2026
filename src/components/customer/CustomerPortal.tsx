@@ -200,7 +200,9 @@ export const CustomerPortal: React.FC<CustomerPortalProps> = ({
         name: userData.name,
       }));
     } catch (e: any) {
-      console.warn('Customer Google sign-in cancelled or failed:', e);
+      console.warn('Customer Google sign-in notice:', e);
+      // Open modal so user sees the FirebaseDomainHelper guidance or can use demo login
+      setIsCustomerAuthModalOpen(true);
     } finally {
       setIsGoogleSigningIn(false);
     }

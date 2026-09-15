@@ -26,7 +26,8 @@ import {
 } from 'lucide-react';
 import { signInWithEmailAndPassword, createUserWithEmailAndPassword } from 'firebase/auth';
 import { doc, setDoc } from 'firebase/firestore';
-import { auth as firebaseAuth, db as firestoreDb, signInWithGoogle } from '../../services/firebase';
+import { auth as firebaseAuth, db as firestoreDb, signInWithGoogle, formatFirebaseAuthError } from '../../services/firebase';
+import { FirebaseDomainHelper } from '../common/FirebaseDomainHelper';
 import { api, ApiWorker, AuthUser, setAuthToken } from '../../services/api';
 import { DetectedLocation } from '../../hooks/useLocation';
 import { GoogleIcon } from '../common/GoogleIcon';
@@ -129,6 +130,7 @@ export const WorkerAuth: React.FC<WorkerAuthProps> = ({
   const [tab, setTab] = useState<'register' | 'login'>('register');
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [showDomainHelper, setShowDomainHelper] = useState(false);
   const [registeredWorker, setRegisteredWorker] = useState<ApiWorker | null>(null);
 
   // Registration step wizard: 1 = Trade & Profile, 2 = Govt ID & Credentials, 3 = Skill Competency Assessment
@@ -325,20 +327,14 @@ export const WorkerAuth: React.FC<WorkerAuthProps> = ({
         setRegStep(2);
       }
     } catch (err: any) {
-      if (
-        err?.code === 'auth/popup-closed-by-user' ||
-        err?.message?.includes('closed-by-user') ||
-        err?.code === 'auth/cancelled-popup-request'
-      ) {
-        setErrorMsg('Sign-in cancelled. Please click the button to retry or use phone & password login below.');
-        return;
-      }
-      if (err?.code === 'auth/popup-blocked' || err?.message?.includes('popup-blocked')) {
-        setErrorMsg('Pop-up was blocked by browser. Please allow popups or use phone & password login below.');
-        return;
-      }
       console.warn('Google Worker Auth notice:', err);
-      setErrorMsg(err.message || 'Google sign-in could not be completed.');
+      const friendly = formatFirebaseAuthError(err);
+      if (friendly.isUnauthorizedDomain) {
+        setShowDomainHelper(true);
+        setErrorMsg(null);
+      } else {
+        setErrorMsg(friendly.message);
+      }
     } finally {
       setLoading(false);
     }
@@ -540,6 +536,19 @@ export const WorkerAuth: React.FC<WorkerAuthProps> = ({
               </span>
               <div className="flex-1 h-px bg-slate-200" />
             </div>
+
+            {showDomainHelper && (
+              <FirebaseDomainHelper
+                className="mb-4"
+                onBypass={() => {
+                  setTab('login');
+                  setLoginIdentifier('+91 98220 12345');
+                  setLoginPassword('coop1234');
+                  setShowDomainHelper(false);
+                }}
+                bypassLabel="Switch to Artisan Phone & Passcode (+91 98220 12345)"
+              />
+            )}
           </div>
 
           {/* Error Banner */}
