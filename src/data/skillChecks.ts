@@ -25,6 +25,27 @@ export interface CredentialDocumentType {
 
 export const CREDENTIAL_DOCUMENT_TYPES: CredentialDocumentType[] = [
   {
+    id: 'practical_experience',
+    name: 'Self-Attested Field Experience (No Paper Documents)',
+    authority: 'Artisan Self-Attestation & In-App Trade Competency Test',
+    description: 'For traditional master craftsmen & informal apprentices with 3+ years field experience who lack paper diplomas',
+    badge: 'Experience Verified',
+  },
+  {
+    id: 'coop_peer_endorsement',
+    name: 'Cooperative Society Peer & Mentor Endorsement',
+    authority: 'Registered Local Primary Cooperative Sanstha / Senior Artisan',
+    description: 'Vouched by a registered cooperative guild, village artisan panchayat, or certified senior craftsman',
+    badge: 'Guild Endorsed',
+  },
+  {
+    id: 'provisional_apprentice',
+    name: 'Provisional Member / Supervised Field Trial',
+    authority: 'Sahakar Seva Federation Field Supervision Committee',
+    description: 'Trial onboarding route: paired with senior artisans on first 5 jobs, upgraded upon positive customer ratings',
+    badge: 'Provisional Member',
+  },
+  {
     id: 'iti_diploma',
     name: 'National Trade Certificate (NTC / ITI)',
     authority: 'Directorate General of Training (DGT / NCVT)',

@@ -99,6 +99,9 @@ function mapApiWorkerToProfile(w: ApiWorker): WorkerProfile {
     idProofType: w.id_proof_type,
     idProofNumber: w.id_proof_number,
     credentialDocType: w.credential_doc_type,
+    verificationPathway: (w.verification_pathway || w.credential_doc_type || 'practical_experience') as any,
+    mentorArtisanName: w.mentor_artisan_name,
+    experienceYears: w.experience_years,
     location: {
       city: w.city || 'Pune',
       area: w.area || 'Shivajinagar',

@@ -26,7 +26,7 @@ export interface Certification {
   issueDate: string;
   expiryDate?: string;
   verificationStatus: VerificationStatus;
-  documentType: 'license' | 'iti_diploma' | 'skill_india_nsdc' | 'wireman_license' | 'safety_clearance' | 'trade_card' | 'other';
+  documentType: 'license' | 'iti_diploma' | 'skill_india_nsdc' | 'wireman_license' | 'safety_clearance' | 'trade_card' | 'practical_experience' | 'coop_peer_endorsement' | 'provisional_apprentice' | 'other';
   fileUrl?: string;
   verifiedAt?: string;
   verifiedBy?: string;
@@ -60,6 +60,9 @@ export interface WorkerProfile {
   idProofType?: string;
   idProofNumber?: string;
   credentialDocType?: string;
+  verificationPathway?: 'traditional_credentials' | 'practical_experience' | 'coop_peer_endorsement' | 'provisional_apprentice';
+  mentorArtisanName?: string;
+  experienceYears?: number;
   location: {
     city: string;
     area: string;

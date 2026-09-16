@@ -41,6 +41,9 @@ export interface ApiWorker {
   credential_doc_type?: string;
   credential_file_name?: string;
   digital_seal_code?: string;
+  verification_pathway?: string;
+  mentor_artisan_name?: string;
+  experience_years?: number;
   certifications?: ApiCertification[];
   emergencyCertified: boolean;
   availability: 'available' | 'on_job' | 'offline';
@@ -422,4 +425,25 @@ export const api = {
         escrowTerms: string;
       };
     }>(`/api/bookings/${encodeURIComponent(bookingIdOrCode)}/escrow`),
+
+  // Authorize & Lock Escrow via UPI
+  payBookingEscrow: (bookingIdOrCode: string, payload?: { utrNumber?: string; paymentMethod?: string }) =>
+    fetchJson<{
+      success: boolean;
+      message: string;
+      utr: string;
+      booking: ApiBooking;
+      paymentStatus: string;
+      lockedAt: string;
+    }>(`/api/bookings/${encodeURIComponent(bookingIdOrCode)}/pay-escrow`, {
+      method: 'POST',
+      body: JSON.stringify(payload || {}),
+    }),
+
+  // Update Worker UPI VPA
+  updateWorkerUpi: (workerId: string, upiId: string) =>
+    fetchJson<{ success: boolean; message: string; worker: ApiWorker }>(`/api/workers/${workerId}/upi`, {
+      method: 'PUT',
+      body: JSON.stringify({ upiId }),
+    }),
 };

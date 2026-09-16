@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import crypto from 'node:crypto';
 
-// In serverless environments like Vercel, process.cwd() is read-only.
+// In serverless environments like Vercel or Netlify, process.cwd() is read-only.
 // We store runtime SQLite databases in os.tmpdir() or fallback to memory.
 const isServerless = Boolean(
   process.env.VERCEL ||
@@ -15,17 +15,23 @@ const isServerless = Boolean(
   process.env.NODE_ENV === 'test'
 );
 
-const dataDir = isServerless ? path.join(os.tmpdir(), 'sahakar_data') : path.join(process.cwd(), 'data');
+let databaseInstance: any;
 
-let databaseInstance: DatabaseSync;
 try {
-  if (!fs.existsSync(dataDir)) {
-    fs.mkdirSync(dataDir, { recursive: true });
+  const dataDir = isServerless ? path.join(os.tmpdir(), 'sahakar_data') : path.join(process.cwd(), 'data');
+
+  try {
+    if (!fs.existsSync(dataDir)) {
+      fs.mkdirSync(dataDir, { recursive: true });
+    }
+    const dbPath = path.join(dataDir, 'sahakar_seva.db');
+    databaseInstance = new DatabaseSync(dbPath);
+  } catch (dirErr) {
+    console.warn('Notice: SQLite directory creation failed, falling back to :memory::', dirErr);
+    databaseInstance = new DatabaseSync(':memory:');
   }
-  const dbPath = path.join(dataDir, 'sahakar_seva.db');
-  databaseInstance = new DatabaseSync(dbPath);
-} catch (err) {
-  console.warn('Notice: SQLite directory creation or file open fallback to in-memory SQLite:', err);
+} catch (importErr) {
+  console.warn('Notice: SQLite fallback to in-memory:', importErr);
   databaseInstance = new DatabaseSync(':memory:');
 }
 
@@ -178,21 +184,22 @@ export function initDatabase(force = false) {
   safeAddColumn('workers', 'credential_doc_type TEXT');
   safeAddColumn('workers', 'credential_file_name TEXT');
   safeAddColumn('workers', 'digital_seal_code TEXT');
+  safeAddColumn('workers', 'verification_pathway TEXT');
+  safeAddColumn('workers', 'mentor_artisan_name TEXT');
+  safeAddColumn('workers', 'experience_years REAL DEFAULT 0');
 
-  // Ensure default federation admin user exists for verification board
-  const adminId = 'u-admin-1';
-  const salt = crypto.randomBytes(16).toString('hex');
-  const hashedPw = hashPassword('coop1234', salt);
-  const now = new Date().toISOString();
-  db.prepare(`
-    INSERT OR IGNORE INTO users (id, email, phone, name, role, password_hash, salt, created_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-  `).run(adminId, 'admin@sahakar.coop', '+919800011222', 'Federation Board Officer', 'admin', hashedPw, salt, now);
+  // Remove any legacy default demo admin user record
+  try {
+    db.prepare(`DELETE FROM users WHERE email = 'admin@sahakar.coop' OR id = 'u-admin-1'`).run();
+  } catch {
+    // safe ignore if table not yet created
+  }
 
   // Ensure default demo customer user exists for easy testing
   const custId = 'u-customer-1';
   const custSalt = crypto.randomBytes(16).toString('hex');
   const custHashedPw = hashPassword('customer123', custSalt);
+  const now = new Date().toISOString();
   db.prepare(`
     INSERT OR IGNORE INTO users (id, email, phone, name, role, password_hash, salt, created_at)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?)

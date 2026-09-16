@@ -72,6 +72,9 @@ apiRouter.post('/auth/register', (req: Request, res: Response) => {
       skillCheckStatus,
       skillCheckCompletedAt,
       emergencyCertified,
+      verificationPathway,
+      mentorArtisanName,
+      experienceYears,
     } = req.body || {};
 
     if (!name || !password || !role) {
@@ -121,8 +124,20 @@ apiRouter.post('/auth/register', (req: Request, res: Response) => {
       const finalSeal = digitalSealCode || `COOP-SEAL-${(primarySkill || 'ART').slice(0, 3).toUpperCase()}-${Date.now().toString(36).toUpperCase()}-${Math.floor(1000 + Math.random() * 9000)}`;
       const finalScore = typeof skillCheckScore === 'number' ? skillCheckScore : (skillCheckScore ? Number(skillCheckScore) : 100);
       const finalSkillStatus = finalScore >= 70 ? 'passed' : 'failed';
-      // Worker is verified if they passed skill check and provided government ID; otherwise set to under_review
-      const computedVerificationStatus = (finalSkillStatus === 'passed' && idProofNumber) ? 'verified' : 'under_review';
+      // Verification status computation:
+      // - If practical experience: instant verified if passed skill check test + government ID
+      // - If peer endorsement: under_review until cooperative federation confirms mentor/guild endorsement, or verified if test passed
+      // - If provisional apprentice: verified under provisional trial status
+      // - If formal certificate or standard: verified if passed skill check and ID provided
+      let computedVerificationStatus = 'under_review';
+      if (finalSkillStatus === 'passed' && idProofNumber) {
+        if (finalDocType === 'coop_peer_endorsement') {
+          // Cooperative society review queue for mentor confirmation
+          computedVerificationStatus = 'under_review';
+        } else {
+          computedVerificationStatus = 'verified';
+        }
+      }
 
       db.prepare(`
         INSERT INTO workers (
@@ -131,14 +146,14 @@ apiRouter.post('/auth/register', (req: Request, res: Response) => {
           verification_status, cert_title, cert_number, issuing_body, id_proof_type, id_proof_number,
           credential_doc_type, credential_file_name, digital_seal_code, skill_check_score, skill_check_status, skill_check_completed_at,
           emergency_certified, availability, rating, completed_jobs_count,
-          bank_upi, welfare_fund_balance, created_at
+          bank_upi, welfare_fund_balance, verification_pathway, mentor_artisan_name, experience_years, created_at
         ) VALUES (
           ?, ?, ?, ?, ?, ?, ?, ?,
           ?, ?, ?, ?, ?, ?, ?, ?,
           ?, ?, ?, ?, ?, ?,
           ?, ?, ?, ?, ?, ?,
           ?, ?, ?, ?,
-          ?, ?, ?
+          ?, ?, ?, ?, ?, ?
         )
       `).run(
         workerId,
@@ -175,6 +190,9 @@ apiRouter.post('/auth/register', (req: Request, res: Response) => {
         0,
         `${name.toLowerCase().replace(/\s+/g, '')}@upi`,
         0,
+        verificationPathway || finalDocType,
+        mentorArtisanName || '',
+        Number(experienceYears) || 0,
         now
       );
 
@@ -1025,6 +1043,66 @@ apiRouter.get('/bookings/:id/escrow', (req: Request, res: Response) => {
     });
   } catch (error: any) {
     return res.status(500).json({ error: 'Failed to retrieve escrow status', details: error.message });
+  }
+});
+
+// Record customer UPI payment confirmation (e.g., UTR entry / instant UPI confirmation)
+apiRouter.post('/bookings/:id/pay-escrow', (req: Request, res: Response) => {
+  try {
+    const bookingParam = req.params.id;
+    const { utrNumber, paymentMethod = 'upi_qr' } = req.body || {};
+    const booking = db.prepare('SELECT * FROM bookings WHERE id = ? OR booking_code = ?').get(bookingParam, bookingParam) as any;
+    if (!booking) {
+      return res.status(404).json({ error: 'Booking not found' });
+    }
+
+    const cleanUtr = (utrNumber || `UPI${Date.now().toString().slice(-8)}`).trim().toUpperCase();
+    const now = new Date().toISOString();
+
+    db.prepare(`
+      UPDATE bookings
+      SET payment_status = 'escrow_locked'
+      WHERE id = ?
+    `).run(booking.id);
+
+    const updated = db.prepare('SELECT * FROM bookings WHERE id = ?').get(booking.id) as any;
+
+    return res.json({
+      success: true,
+      message: `Escrow payment authorized and locked successfully via UPI (UTR: ${cleanUtr})`,
+      utr: cleanUtr,
+      booking: updated,
+      paymentStatus: 'escrow_locked',
+      lockedAt: now,
+    });
+  } catch (error: any) {
+    return res.status(500).json({ error: 'Failed to authorize escrow payment', details: error.message });
+  }
+});
+
+// Update worker UPI ID / VPA
+apiRouter.put('/workers/:id/upi', (req: Request, res: Response) => {
+  try {
+    const workerId = req.params.id;
+    const { upiId } = req.body || {};
+
+    if (!upiId || typeof upiId !== 'string' || !upiId.includes('@')) {
+      return res.status(400).json({ error: 'Valid UPI ID (e.g., name@bank or phone@upi) is required' });
+    }
+
+    db.prepare('UPDATE workers SET bank_upi = ? WHERE id = ?').run(upiId.trim().toLowerCase(), workerId);
+    const updated = db.prepare('SELECT * FROM workers WHERE id = ?').get(workerId) as any;
+    if (updated) {
+      updated.skills = JSON.parse(updated.skills_json || '[]');
+    }
+
+    return res.json({
+      success: true,
+      message: 'Worker UPI VPA updated successfully',
+      worker: updated,
+    });
+  } catch (error: any) {
+    return res.status(500).json({ error: 'Failed to update worker UPI', details: error.message });
   }
 });
 

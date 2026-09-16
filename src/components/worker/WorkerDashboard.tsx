@@ -23,6 +23,8 @@ import {
   Star,
   ThumbsUp,
   UserCheck,
+  QrCode,
+  Check,
 } from 'lucide-react';
 import {
   WorkerProfile,
@@ -37,6 +39,7 @@ import { WorkerVerificationPortal } from './WorkerVerificationPortal';
 import { WorkerRealtimeTelemetry } from './WorkerRealtimeTelemetry';
 import { WorkerReputationPanel } from './WorkerReputationPanel';
 import { BookerRatingModal } from '../common/BookerRatingModal';
+import { api } from '../../services/api';
 
 interface WorkerDashboardProps {
   worker: WorkerProfile;
@@ -84,6 +87,12 @@ export const WorkerDashboard: React.FC<WorkerDashboardProps> = ({
   const [showClaimModal, setShowClaimModal] = useState(false);
   const [claimSubmitted, setClaimSubmitted] = useState(false);
   const [ratingBookerBooking, setRatingBookerBooking] = useState<Booking | null>(null);
+
+  // Worker UPI ID editing state
+  const [editingUpi, setEditingUpi] = useState(false);
+  const [workerUpiInput, setWorkerUpiInput] = useState(worker?.bankUpi || 'worker@upi');
+  const [isSavingUpi, setIsSavingUpi] = useState(false);
+  const [upiSaveMsg, setUpiSaveMsg] = useState<string | null>(null);
 
   if (!worker) {
     return (
@@ -682,6 +691,109 @@ export const WorkerDashboard: React.FC<WorkerDashboardProps> = ({
               </p>
               <p className="text-[11px] text-slate-500 mt-1">Earning 8.2% cooperative annual dividend</p>
             </div>
+          </div>
+
+          {/* Worker UPI ID & Payout Destination Management Card */}
+          <div className="p-5 bg-white rounded-2xl border border-emerald-200 shadow-xs">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div className="flex items-center gap-3">
+                <div className="p-2.5 bg-emerald-50 text-emerald-700 rounded-xl border border-emerald-200">
+                  <QrCode className="w-5 h-5" />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h4 className="font-extrabold text-slate-900 text-sm">
+                      {lang === 'hi'
+                        ? 'कारीगर यूपीआई आईडी एवं प्रत्यक्ष निपटान'
+                        : lang === 'mr'
+                        ? 'कारागीर UPI आयडी आणि थेट जमा'
+                        : lang === 'te'
+                        ? 'కార్మికుడి UPI ID & ప్రత్యక్ష జమ'
+                        : 'Artisan UPI ID & Direct 90% Payout Account'}
+                    </h4>
+                    <span className="text-[10px] bg-emerald-100 text-emerald-800 font-bold px-2 py-0.5 rounded-full">
+                      Zero Fees
+                    </span>
+                  </div>
+                  <p className="text-xs text-slate-500 mt-0.5">
+                    {lang === 'hi'
+                      ? 'नागरिकों द्वारा काम पूरा करने पर आपकी 90% कमाई सीधे इस यूपीआई आईडी में जमा होगी।'
+                      : lang === 'mr'
+                      ? 'काम पूर्ण झाल्यावर तुमची ९०% कमाई थेट या UPI आयडीवर वर्ग केली जाते.'
+                      : lang === 'te'
+                      ? 'పని పూర్తయిన తర్వాత మీ 90% సంపాదన నేరుగా ఈ UPI IDకి బదిలీ చేయబడుతుంది.'
+                      : 'All completed job escrows automatically disburse 90% direct to this UPI address.'}
+                  </p>
+                </div>
+              </div>
+
+              {!editingUpi ? (
+                <div className="flex items-center gap-2">
+                  <span className="font-mono text-xs font-bold px-3 py-1.5 rounded-xl bg-slate-100 border border-slate-200 text-slate-800">
+                    {workerUpiInput}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setEditingUpi(true)}
+                    className="px-3 py-1.5 text-xs font-bold text-emerald-800 hover:text-emerald-950 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 rounded-xl transition cursor-pointer"
+                  >
+                    Change UPI ID
+                  </button>
+                </div>
+              ) : (
+                <div className="flex items-center gap-2 w-full sm:w-auto">
+                  <input
+                    type="text"
+                    value={workerUpiInput}
+                    onChange={(e) => setWorkerUpiInput(e.target.value)}
+                    placeholder="e.g. mobile@upi or name@okicici"
+                    className="text-xs font-mono px-3 py-2 border border-slate-300 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:outline-hidden w-full sm:w-60"
+                  />
+                  <button
+                    type="button"
+                    disabled={isSavingUpi}
+                    onClick={async () => {
+                      if (!workerUpiInput.includes('@')) {
+                        setUpiSaveMsg('Please enter a valid UPI ID with @ symbol');
+                        return;
+                      }
+                      setIsSavingUpi(true);
+                      setUpiSaveMsg(null);
+                      try {
+                        const res = await api.updateWorkerUpi(worker.id, workerUpiInput);
+                        if (res.success) {
+                          setEditingUpi(false);
+                          setUpiSaveMsg('UPI ID saved successfully!');
+                          if (onWorkerUpdated) onWorkerUpdated(res.worker);
+                        }
+                      } catch (err: any) {
+                        setUpiSaveMsg(err.message || 'Failed to save UPI ID');
+                      } finally {
+                        setIsSavingUpi(false);
+                      }
+                    }}
+                    className="px-3 py-2 text-xs font-bold bg-emerald-700 hover:bg-emerald-800 text-white rounded-xl shadow-xs transition cursor-pointer shrink-0"
+                  >
+                    {isSavingUpi ? 'Saving...' : 'Save'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setWorkerUpiInput(worker.bankUpi || 'worker@upi');
+                      setEditingUpi(false);
+                    }}
+                    className="px-2.5 py-2 text-xs font-semibold text-slate-500 hover:text-slate-700 cursor-pointer"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              )}
+            </div>
+            {upiSaveMsg && (
+              <p className={`text-xs mt-2 font-medium ${upiSaveMsg.includes('success') ? 'text-emerald-700' : 'text-rose-600'}`}>
+                {upiSaveMsg}
+              </p>
+            )}
           </div>
 
           {/* Welfare Card: Insurance & Health Scheme */}

@@ -13,9 +13,12 @@ import {
   Check,
   Plus,
   Stamp,
+  Volume2,
+  Sparkles,
 } from 'lucide-react';
 import { ApiWorker, ApiCertification, api } from '../../services/api';
 import { getTradeSkillCheck, CREDENTIAL_DOCUMENT_TYPES } from '../../data/skillChecks';
+import { AccessibleSkillQuiz } from './AccessibleSkillQuiz';
 
 interface WorkerVerificationPortalProps {
   worker: ApiWorker;
@@ -50,6 +53,7 @@ export const WorkerVerificationPortal: React.FC<WorkerVerificationPortalProps> =
 
   // Skill Check Quiz State
   const [isTakingSkillCheck, setIsTakingSkillCheck] = useState(false);
+  const [useAccessibleQuizMode, setUseAccessibleQuizMode] = useState(true);
   const [skillQuizTrade, setSkillQuizTrade] = useState(worker.primary_skill || 'Electrical');
   const [skillQuizAnswers, setSkillQuizAnswers] = useState<Record<string, number>>({});
 
@@ -239,11 +243,21 @@ export const WorkerVerificationPortal: React.FC<WorkerVerificationPortalProps> =
                 <ShieldCheck className="w-7 h-7" />
               </div>
               <div className="flex-1">
-                <h4 className="text-base font-extrabold text-slate-900 mb-1">
-                  Federation Verified Cooperative Artisan Badge Active
-                </h4>
+                <div className="flex items-center gap-2 flex-wrap mb-1">
+                  <h4 className="text-base font-extrabold text-slate-900">
+                    Federation Verified Cooperative Artisan Badge Active
+                  </h4>
+                  {(worker as any).verification_pathway && (
+                    <span className="text-[10px] font-bold px-2.5 py-0.5 rounded-full bg-teal-100 text-teal-800 border border-teal-300">
+                      {(worker as any).verification_pathway === 'practical_experience' ? '🛠️ Practical Experience Pathway' :
+                       (worker as any).verification_pathway === 'coop_peer_endorsement' ? '🤝 Cooperative Guild Endorsed' :
+                       (worker as any).verification_pathway === 'provisional_apprentice' ? '🧭 Supervised Field Apprentice' :
+                       'Certified Trade Pathway'}
+                    </span>
+                  )}
+                </div>
                 <p className="text-xs text-slate-600 leading-relaxed mb-4">
-                  Your government identification, trade credentials, and police verification have been audited and approved by the Cooperative Federation Board. You are authorized to receive high-value dispatches and emergency calls.
+                  Your government identification, trade credentials, and practical competency have been audited and approved by the Cooperative Federation Board. You are authorized to receive high-value dispatches and emergency calls.
                 </p>
 
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
@@ -306,84 +320,147 @@ export const WorkerVerificationPortal: React.FC<WorkerVerificationPortalProps> =
             {/* Interactive Assessment Modal / Form */}
             {isTakingSkillCheck && (
               <div className="mt-4 pt-4 border-t border-slate-800 space-y-4">
-                <div className="flex items-center justify-between">
-                  <span className="font-bold text-xs text-amber-300">
-                    Active Quiz: {skillQuizTrade} Competency Check (3 Questions)
-                  </span>
-                  <span className="text-[10px] text-slate-400">IS Safety Protocol Clearance</span>
+                {/* Mode Selector */}
+                <div className="flex flex-wrap items-center justify-between gap-2 p-2.5 rounded-xl bg-slate-800 border border-slate-700">
+                  <div className="flex items-center gap-2">
+                    <Sparkles className="w-4 h-4 text-amber-400" />
+                    <span className="font-bold text-xs text-white">
+                      {skillQuizTrade} Trade Competency Check
+                    </span>
+                  </div>
+
+                  <div className="flex items-center gap-1.5">
+                    <button
+                      type="button"
+                      onClick={() => setUseAccessibleQuizMode(true)}
+                      className={`px-2.5 py-1 rounded-lg text-xs font-bold transition flex items-center gap-1 cursor-pointer ${
+                        useAccessibleQuizMode
+                          ? 'bg-teal-600 text-white shadow-xs'
+                          : 'text-slate-400 hover:text-slate-200'
+                      }`}
+                    >
+                      <Volume2 className="w-3.5 h-3.5" />
+                      <span>Voice & Picture (Accessible)</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setUseAccessibleQuizMode(false)}
+                      className={`px-2.5 py-1 rounded-lg text-xs font-bold transition flex items-center gap-1 cursor-pointer ${
+                        !useAccessibleQuizMode
+                          ? 'bg-teal-600 text-white shadow-xs'
+                          : 'text-slate-400 hover:text-slate-200'
+                      }`}
+                    >
+                      <span>Standard Text Quiz</span>
+                    </button>
+                  </div>
                 </div>
 
-                <div className="space-y-3">
-                  {getTradeSkillCheck(skillQuizTrade).questions.map((q, idx) => {
-                    const ans = skillQuizAnswers[q.id];
-                    const isAnswered = ans !== undefined;
-                    const isCorrect = ans === q.correctIndex;
+                {useAccessibleQuizMode ? (
+                  <div className="pt-1">
+                    <AccessibleSkillQuiz
+                      trade={skillQuizTrade}
+                      workerName={worker.name}
+                      initialLang="hi"
+                      onComplete={async (scorePercentage, passed) => {
+                        setSubmitting(true);
+                        try {
+                          const res = await api.submitSkillCheck(worker.id, {
+                            trade: skillQuizTrade,
+                            score: Math.round((scorePercentage / 100) * 3),
+                            total: 3,
+                            percentage: scorePercentage,
+                          });
+                          if (res.success && res.worker) {
+                            onWorkerUpdated(res.worker);
+                            setSuccessNotice(`Trade Skill Check passed with ${scorePercentage}% score! Cryptographic seal updated.`);
+                            setIsTakingSkillCheck(false);
+                            loadCertifications();
+                          }
+                        } catch (err: any) {
+                          setErrorMessage(err.message || 'Failed to submit skill assessment');
+                        } finally {
+                          setSubmitting(false);
+                        }
+                      }}
+                      onCancel={() => setIsTakingSkillCheck(false)}
+                    />
+                  </div>
+                ) : (
+                  <>
+                    <div className="space-y-3">
+                      {getTradeSkillCheck(skillQuizTrade).questions.map((q, idx) => {
+                        const ans = skillQuizAnswers[q.id];
+                        const isAnswered = ans !== undefined;
+                        const isCorrect = ans === q.correctIndex;
 
-                    return (
-                      <div key={q.id} className="p-3.5 rounded-xl bg-slate-800/90 border border-slate-700 space-y-2 text-xs">
-                        <div className="flex items-start justify-between gap-2">
-                          <span className="font-semibold text-slate-200">
-                            {idx + 1}. {q.question}
-                          </span>
-                          <span className="text-[10px] text-teal-400 font-mono bg-slate-900 px-2 py-0.5 rounded">
-                            {q.conceptTag}
-                          </span>
-                        </div>
+                        return (
+                          <div key={q.id} className="p-3.5 rounded-xl bg-slate-800/90 border border-slate-700 space-y-2 text-xs">
+                            <div className="flex items-start justify-between gap-2">
+                              <span className="font-semibold text-slate-200">
+                                {idx + 1}. {q.question}
+                              </span>
+                              <span className="text-[10px] text-teal-400 font-mono bg-slate-900 px-2 py-0.5 rounded">
+                                {q.conceptTag}
+                              </span>
+                            </div>
 
-                        <div className="space-y-1.5">
-                          {q.options.map((opt, optIdx) => {
-                            const isChosen = ans === optIdx;
-                            let cls = 'bg-slate-900/80 border-slate-700 text-slate-300 hover:bg-slate-700';
-                            if (isAnswered) {
-                              if (isChosen && isCorrect) {
-                                cls = 'bg-emerald-700 border-emerald-500 text-white font-bold';
-                              } else if (isChosen && !isCorrect) {
-                                cls = 'bg-amber-700 border-amber-500 text-white font-bold';
-                              } else if (optIdx === q.correctIndex) {
-                                cls = 'bg-emerald-950 border-emerald-700 text-emerald-300 font-semibold';
-                              }
-                            }
-                            return (
-                              <button
-                                key={optIdx}
-                                type="button"
-                                onClick={() => setSkillQuizAnswers((prev) => ({ ...prev, [q.id]: optIdx }))}
-                                className={`w-full text-left p-2 rounded-lg border text-[11px] transition cursor-pointer flex items-center justify-between ${cls}`}
-                              >
-                                <span>{opt}</span>
-                                {isAnswered && optIdx === q.correctIndex && <Check className="w-3.5 h-3.5 text-emerald-400" />}
-                              </button>
-                            );
-                          })}
-                        </div>
+                            <div className="space-y-1.5">
+                              {q.options.map((opt, optIdx) => {
+                                const isChosen = ans === optIdx;
+                                let cls = 'bg-slate-900/80 border-slate-700 text-slate-300 hover:bg-slate-700';
+                                if (isAnswered) {
+                                  if (isChosen && isCorrect) {
+                                    cls = 'bg-emerald-700 border-emerald-500 text-white font-bold';
+                                  } else if (isChosen && !isCorrect) {
+                                    cls = 'bg-amber-700 border-amber-500 text-white font-bold';
+                                  } else if (optIdx === q.correctIndex) {
+                                    cls = 'bg-emerald-950 border-emerald-700 text-emerald-300 font-semibold';
+                                  }
+                                }
+                                return (
+                                  <button
+                                    key={optIdx}
+                                    type="button"
+                                    onClick={() => setSkillQuizAnswers((prev) => ({ ...prev, [q.id]: optIdx }))}
+                                    className={`w-full text-left p-2 rounded-lg border text-[11px] transition cursor-pointer flex items-center justify-between ${cls}`}
+                                  >
+                                    <span>{opt}</span>
+                                    {isAnswered && optIdx === q.correctIndex && <Check className="w-3.5 h-3.5 text-emerald-400" />}
+                                  </button>
+                                );
+                              })}
+                            </div>
 
-                        {isAnswered && (
-                          <p className="text-[10px] text-slate-400 mt-1 italic">
-                            ✓ {q.explanation}
-                          </p>
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
+                            {isAnswered && (
+                              <p className="text-[10px] text-slate-400 mt-1 italic">
+                                ✓ {q.explanation}
+                              </p>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
 
-                <div className="flex gap-2 justify-end pt-2">
-                  <button
-                    type="button"
-                    onClick={() => setIsTakingSkillCheck(false)}
-                    className="px-3 py-1.5 rounded-xl border border-slate-700 text-slate-300 hover:bg-slate-800 text-xs font-semibold cursor-pointer"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    type="button"
-                    disabled={submitting || Object.keys(skillQuizAnswers).length < 3}
-                    onClick={handleSubmitSkillQuiz}
-                    className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white text-xs font-bold transition shadow-xs cursor-pointer"
-                  >
-                    {submitting ? 'Saving Assessment...' : 'Submit & Update Digital Seal'}
-                  </button>
-                </div>
+                    <div className="flex gap-2 justify-end pt-2">
+                      <button
+                        type="button"
+                        onClick={() => setIsTakingSkillCheck(false)}
+                        className="px-3 py-1.5 rounded-xl border border-slate-700 text-slate-300 hover:bg-slate-800 text-xs font-semibold cursor-pointer"
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        type="button"
+                        disabled={submitting || Object.keys(skillQuizAnswers).length < 3}
+                        onClick={handleSubmitSkillQuiz}
+                        className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white text-xs font-bold transition shadow-xs cursor-pointer"
+                      >
+                        {submitting ? 'Saving Assessment...' : 'Submit & Update Digital Seal'}
+                      </button>
+                    </div>
+                  </>
+                )}
               </div>
             )}
           </div>

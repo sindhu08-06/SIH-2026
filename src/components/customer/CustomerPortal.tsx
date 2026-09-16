@@ -27,6 +27,7 @@ import {
   Globe2,
   Award,
   Stamp,
+  QrCode,
 } from 'lucide-react';
 import { DetectedLocation } from '../../hooks/useLocation';
 import { ApiWorker, ApiBooking, api } from '../../services/api';
@@ -39,6 +40,7 @@ import { WorkerRatingModal } from '../common/WorkerRatingModal';
 import { WorkerCredentialsModal } from '../common/WorkerCredentialsModal';
 import { WorkerReviewsModal } from '../common/WorkerReviewsModal';
 import { CustomerAuthModal } from './CustomerAuthModal';
+import { DynamicUpiQrModal } from '../common/DynamicUpiQrModal';
 import { getTranslation } from '../../locales/i18n';
 
 const getCategoryName = (id: string, name: string, lang: Language) => {
@@ -129,6 +131,7 @@ export const CustomerPortal: React.FC<CustomerPortalProps> = ({
     isVerified: boolean;
   } | null>(null);
   const [verifiedOnlyFilter, setVerifiedOnlyFilter] = useState(false);
+  const [payingUpiBooking, setPayingUpiBooking] = useState<ApiBooking | null>(null);
 
   // Customer Firebase Google & Local Auth State
   const [customerUser, setCustomerUser] = useState<{
@@ -1202,7 +1205,7 @@ export const CustomerPortal: React.FC<CustomerPortalProps> = ({
                       </div>
                       <div className="text-2xl font-black text-slate-900 mb-2">₹{b.pricing.totalAmount}</div>
 
-                      <div className="text-[11px] text-slate-500 space-y-0.5 mb-4">
+                      <div className="text-[11px] text-slate-500 space-y-0.5 mb-3">
                         <div className="text-emerald-700 font-semibold">
                           ₹{b.pricing.workerPayout}{' '}
                           {lang === 'hi'
@@ -1224,6 +1227,32 @@ export const CustomerPortal: React.FC<CustomerPortalProps> = ({
                             : 'Cooperative Welfare (7%)'}
                         </div>
                       </div>
+
+                      {/* Pay via UPI Dynamic QR Button */}
+                      <button
+                        type="button"
+                        onClick={() => setPayingUpiBooking(b)}
+                        className="w-full mb-2 py-2 px-3 rounded-xl bg-gradient-to-r from-emerald-700 to-teal-800 hover:from-emerald-800 hover:to-teal-900 text-white text-xs font-bold flex items-center justify-center gap-1.5 shadow-sm transition active:scale-95 cursor-pointer"
+                      >
+                        <QrCode className="w-3.5 h-3.5" />
+                        <span>
+                          {b.payment_status === 'escrow_locked'
+                            ? lang === 'hi'
+                              ? 'यूपीआई क्यूआर / एस्क्रो देखें'
+                              : lang === 'mr'
+                              ? 'UPI QR / एस्क्रो पहा'
+                              : lang === 'te'
+                              ? 'UPI QR / ఎస్క్రో చూడండి'
+                              : 'UPI QR / Escrow Paid'
+                            : lang === 'hi'
+                            ? 'डायनामिक यूपीआई क्यूआर से भुगतान'
+                            : lang === 'mr'
+                            ? 'डायनॅमिक UPI QR द्वारे देय द्या'
+                            : lang === 'te'
+                            ? 'డైనమిక్ UPI QR ద్వారా చెల్లించండి'
+                            : 'Pay via Dynamic UPI QR'}
+                        </span>
+                      </button>
 
                       {b.status === 'completed' ? (
                         <div className="space-y-2">
@@ -1682,6 +1711,19 @@ export const CustomerPortal: React.FC<CustomerPortalProps> = ({
         }}
         lang={lang}
       />
+
+      {/* Interactive Dynamic UPI QR Modal */}
+      {payingUpiBooking && (
+        <DynamicUpiQrModal
+          isOpen={Boolean(payingUpiBooking)}
+          booking={payingUpiBooking}
+          lang={lang}
+          onClose={() => setPayingUpiBooking(null)}
+          onPaymentConfirmed={(updated) => {
+            loadData();
+          }}
+        />
+      )}
     </div>
   );
 };

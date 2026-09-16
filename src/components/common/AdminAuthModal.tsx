@@ -38,8 +38,8 @@ export const AdminAuthModal: React.FC<AdminAuthModalProps> = ({
   onSuccess,
 }) => {
   const [authMode, setAuthMode] = useState<'google' | 'password'>('google');
-  const [email, setEmail] = useState('admin@sahakar.coop');
-  const [password, setPassword] = useState('coop1234');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
@@ -62,13 +62,15 @@ export const AdminAuthModal: React.FC<AdminAuthModalProps> = ({
       });
 
       // Synchronize with local backend session token for SQLite endpoints
-      try {
-        const backendRes = await api.login(user.email || 'admin@sahakar.coop', 'coop1234');
-        if (backendRes.token) {
-          setAuthToken(backendRes.token);
+      if (user.email) {
+        try {
+          const backendRes = await api.login(user.email, user.uid);
+          if (backendRes.token) {
+            setAuthToken(backendRes.token);
+          }
+        } catch (e) {
+          console.warn('Local session sync fallback:', e);
         }
-      } catch (e) {
-        console.warn('Local session sync fallback:', e);
       }
 
       setAuthSuccessMsg(`Welcome, ${profile.name}! Authenticated with Google Firebase.`);
@@ -95,10 +97,8 @@ export const AdminAuthModal: React.FC<AdminAuthModalProps> = ({
     }
   };
 
-  const handleSwitchToDemoPassword = () => {
+  const handleSwitchToPassword = () => {
     setAuthMode('password');
-    setEmail('admin@sahakar.coop');
-    setPassword('coop1234');
     setErrorMsg(null);
     setShowDomainHelper(false);
   };
@@ -179,13 +179,6 @@ export const AdminAuthModal: React.FC<AdminAuthModalProps> = ({
     } finally {
       setLoading(false);
     }
-  };
-
-  const handleFillDemo = () => {
-    setEmail('admin@sahakar.coop');
-    setPassword('coop1234');
-    setAuthMode('password');
-    setErrorMsg(null);
   };
 
   return (
@@ -272,8 +265,8 @@ export const AdminAuthModal: React.FC<AdminAuthModalProps> = ({
           
           {showDomainHelper && (
             <FirebaseDomainHelper
-              onBypass={handleSwitchToDemoPassword}
-              bypassLabel="Switch to Officer Credentials (admin@sahakar.coop)"
+              onBypass={handleSwitchToPassword}
+              bypassLabel="Switch to Officer Credentials"
             />
           )}
 
@@ -326,13 +319,13 @@ export const AdminAuthModal: React.FC<AdminAuthModalProps> = ({
               </button>
 
               <div className="flex items-center justify-center gap-2 text-[11px] text-slate-400 pt-1">
-                <span>Or use</span>
+                <span>Or sign in with</span>
                 <button
                   type="button"
-                  onClick={handleFillDemo}
+                  onClick={() => setAuthMode('password')}
                   className="text-emerald-700 font-bold hover:underline cursor-pointer"
                 >
-                  standard demo password credentials
+                  officer email & password
                 </button>
               </div>
             </div>
@@ -341,22 +334,6 @@ export const AdminAuthModal: React.FC<AdminAuthModalProps> = ({
           {/* TAB 2: EMAIL & PASSWORD */}
           {authMode === 'password' && (
             <form onSubmit={handleAdminLogin} className="space-y-4">
-              <div className="p-3 rounded-2xl bg-emerald-50/70 border border-emerald-200 text-xs text-emerald-950 flex items-center justify-between gap-2">
-                <div>
-                  <div className="font-bold">Default Demo Admin:</div>
-                  <div className="font-mono text-[11px] text-emerald-800">
-                    admin@sahakar.coop / coop1234
-                  </div>
-                </div>
-                <button
-                  type="button"
-                  onClick={handleFillDemo}
-                  className="px-2.5 py-1 bg-white border border-emerald-300 hover:bg-emerald-100 rounded-lg font-bold text-[11px] text-emerald-900 transition cursor-pointer"
-                >
-                  Auto-Fill
-                </button>
-              </div>
-
               <div>
                 <label className="block text-xs font-bold text-slate-700 mb-1.5">
                   Federation Officer Email
@@ -368,7 +345,7 @@ export const AdminAuthModal: React.FC<AdminAuthModalProps> = ({
                     required
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
-                    placeholder="admin@sahakar.coop"
+                    placeholder="officer@sahakar.coop"
                     className="w-full pl-10 pr-4 py-2.5 rounded-xl bg-slate-50 border border-slate-200 text-xs text-slate-900 focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500 font-medium"
                   />
                 </div>

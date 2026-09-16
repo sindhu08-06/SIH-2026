@@ -23,6 +23,13 @@ import {
   FileText,
   Sparkles,
   HelpCircle,
+  Users,
+  Compass,
+  Star,
+  BookOpen,
+  Volume2,
+  Eye,
+  Building2,
 } from 'lucide-react';
 import { signInWithEmailAndPassword, createUserWithEmailAndPassword } from 'firebase/auth';
 import { doc, setDoc } from 'firebase/firestore';
@@ -36,6 +43,7 @@ import {
   getTradeSkillCheck,
   generateDigitalSeal,
 } from '../../data/skillChecks';
+import { AccessibleSkillQuiz } from './AccessibleSkillQuiz';
 
 interface WorkerAuthProps {
   onAuthSuccess: (user: AuthUser, worker: ApiWorker) => void;
@@ -160,16 +168,25 @@ export const WorkerAuth: React.FC<WorkerAuthProps> = ({
   // Register form state: Step 2 Credentials & ID
   const [idProofType, setIdProofType] = useState('Aadhaar Card');
   const [idProofNumber, setIdProofNumber] = useState('');
-  const [credentialDocType, setCredentialDocType] = useState('iti_diploma');
-  const [regCertTitle, setRegCertTitle] = useState('Certified Industrial Electrician');
-  const [regCertNumber, setRegCertNumber] = useState('ITI-2024-MH-8921');
-  const [regIssuingBody, setRegIssuingBody] = useState('Directorate General of Training (DGT / NCVT)');
-  const [uploadedFileName, setUploadedFileName] = useState('iti_trade_license_cert.pdf');
+  const [credentialDocType, setCredentialDocType] = useState('practical_experience');
+  const [regCertTitle, setRegCertTitle] = useState('Trade Experience Practitioner');
+  const [regCertNumber, setRegCertNumber] = useState('');
+  const [regIssuingBody, setRegIssuingBody] = useState('Artisan Self-Attestation & In-App Competency Assessment');
+  const [uploadedFileName, setUploadedFileName] = useState('');
   const [digitalSealCode, setDigitalSealCode] = useState(() => generateDigitalSeal('temp', 'Electrical'));
+
+  // Alternative pathway specific states (when artisan has no formal paper credentials)
+  const [experienceYears, setExperienceYears] = useState(5);
+  const [practicalSelfAttested, setPracticalSelfAttested] = useState(true);
+  const [endorsingSocietyOrMentor, setEndorsingSocietyOrMentor] = useState('Pune Urban Artisans Guild Society Ltd.');
+  const [mentorPhone, setMentorPhone] = useState('+91 98220 12345');
+  const [provisionalTrialConsent, setProvisionalTrialConsent] = useState(true);
 
   // Register form state: Step 3 Skill Checks
   const [skillAnswers, setSkillAnswers] = useState<Record<string, number>>({});
   const [safetyPledgeChecked, setSafetyPledgeChecked] = useState(true);
+  const [useAccessibleVoiceMode, setUseAccessibleVoiceMode] = useState(false);
+  const [accessibleScoreOverride, setAccessibleScoreOverride] = useState<number | null>(null);
 
   // Keep location synced if provided
   useEffect(() => {
@@ -205,11 +222,12 @@ export const WorkerAuth: React.FC<WorkerAuthProps> = ({
   // Skill Check Assessment calculations
   const currentSkillCheck = getTradeSkillCheck(regSkill);
   const questions = currentSkillCheck.questions;
-  const answeredCount = Object.keys(skillAnswers).length;
-  const correctCount = questions.reduce((acc, q) => {
+  const answeredCount = accessibleScoreOverride !== null ? questions.length : Object.keys(skillAnswers).length;
+  const standardCorrectCount = questions.reduce((acc, q) => {
     return skillAnswers[q.id] === q.correctIndex ? acc + 1 : acc;
   }, 0);
-  const scorePercentage = Math.round((correctCount / questions.length) * 100);
+  const correctCount = accessibleScoreOverride !== null ? Math.round((accessibleScoreOverride / 100) * questions.length) : standardCorrectCount;
+  const scorePercentage = accessibleScoreOverride !== null ? accessibleScoreOverride : Math.round((correctCount / questions.length) * 100);
   const isSkillAssessmentPassed = answeredCount === questions.length && scorePercentage >= currentSkillCheck.passingScorePercentage;
 
   // Handle Login
@@ -354,10 +372,29 @@ export const WorkerAuth: React.FC<WorkerAuthProps> = ({
       return;
     }
     if (!idProofNumber.trim()) {
-      setErrorMsg('Please provide your Government ID / Aadhaar proof number in Step 2');
+      setErrorMsg('Please provide your Government ID / Aadhaar / e-Shram proof number in Step 2');
       setRegStep(2);
       return;
     }
+
+    if (credentialDocType === 'practical_experience' && !practicalSelfAttested) {
+      setErrorMsg('Please confirm the self-attestation declaration for your trade experience in Step 2');
+      setRegStep(2);
+      return;
+    }
+
+    if (credentialDocType === 'coop_peer_endorsement' && !endorsingSocietyOrMentor.trim()) {
+      setErrorMsg('Please provide the endorsing cooperative society or senior artisan name in Step 2');
+      setRegStep(2);
+      return;
+    }
+
+    if (credentialDocType === 'provisional_apprentice' && !provisionalTrialConsent) {
+      setErrorMsg('Please accept the supervised field trial agreement in Step 2');
+      setRegStep(2);
+      return;
+    }
+
     if (answeredCount < questions.length) {
       setErrorMsg('Please answer all 3 trade skill competency questions in Step 3');
       setRegStep(3);
@@ -371,6 +408,29 @@ export const WorkerAuth: React.FC<WorkerAuthProps> = ({
       const cleanEmail = regEmail.trim() || `${regName.toLowerCase().replace(/\s+/g, '')}@sahakar.coop`;
       const finalScore = scorePercentage > 0 ? scorePercentage : 100;
 
+      // Determine appropriate cert title and registration number based on pathway
+      let finalCertTitle = regCertTitle.trim();
+      let finalCertNumber = regCertNumber.trim();
+      let finalIssuingAuthority = regIssuingBody.trim();
+
+      if (credentialDocType === 'practical_experience') {
+        finalCertTitle = finalCertTitle || `${experienceYears}Y Experienced ${regSkill} Master Craftsman (Self-Attested)`;
+        finalCertNumber = finalCertNumber || `EXP-${regSkill.slice(0, 3).toUpperCase()}-${experienceYears}Y-${Math.floor(1000 + Math.random() * 9000)}`;
+        finalIssuingAuthority = finalIssuingAuthority || 'In-App Trade Competency Check & Self-Attestation';
+      } else if (credentialDocType === 'coop_peer_endorsement') {
+        finalCertTitle = finalCertTitle || `Guild Endorsed ${regSkill} Artisan`;
+        finalCertNumber = finalCertNumber || `GUILD-${regSkill.slice(0, 3).toUpperCase()}-${Math.floor(1000 + Math.random() * 9000)}`;
+        finalIssuingAuthority = endorsingSocietyOrMentor || 'Primary Cooperative Society & Artisan Guild';
+      } else if (credentialDocType === 'provisional_apprentice') {
+        finalCertTitle = finalCertTitle || `Provisional Member — Supervised ${regSkill} Field Apprentice`;
+        finalCertNumber = finalCertNumber || `PROV-${regSkill.slice(0, 3).toUpperCase()}-${Math.floor(1000 + Math.random() * 9000)}`;
+        finalIssuingAuthority = finalIssuingAuthority || 'Sahakar Seva Federation Field Supervision Committee';
+      } else {
+        finalCertTitle = finalCertTitle || `${regSkill} Certified Artisan`;
+        finalCertNumber = finalCertNumber || `COOP-${regSkill.slice(0, 2).toUpperCase()}-${Math.floor(10000 + Math.random() * 90000)}`;
+        finalIssuingAuthority = finalIssuingAuthority || 'Directorate General of Training / State Cooperative Board';
+      }
+
       const payload = {
         name: regName.trim(),
         phone: regPhone.trim(),
@@ -380,18 +440,26 @@ export const WorkerAuth: React.FC<WorkerAuthProps> = ({
         primarySkill: regSkill,
         skills: selectedTasks,
         hourlyRate: Number(regRate) || 400,
-        certTitle: regCertTitle.trim() || `${regSkill} Certified Artisan`,
-        certNumber: regCertNumber.trim() || `COOP-${regSkill.slice(0, 2).toUpperCase()}-${Math.floor(10000 + Math.random() * 90000)}`,
-        issuingBody: regIssuingBody.trim() || 'Directorate General of Training / State Cooperative Board',
+        certTitle: finalCertTitle,
+        certNumber: finalCertNumber,
+        issuingBody: finalIssuingAuthority,
         idProofType,
         idProofNumber: idProofNumber.trim(),
         documentType: credentialDocType,
-        credentialFileName: uploadedFileName,
+        credentialFileName: uploadedFileName || (
+          credentialDocType === 'practical_experience' ? 'experience_self_attestation.pdf' :
+          credentialDocType === 'coop_peer_endorsement' ? 'guild_peer_endorsement_letter.pdf' :
+          credentialDocType === 'provisional_apprentice' ? 'provisional_membership_agreement.pdf' :
+          'trade_credential_cert.pdf'
+        ),
         digitalSealCode,
         skillCheckScore: finalScore,
         skillCheckStatus: 'passed',
         skillCheckCompletedAt: new Date().toISOString(),
         emergencyCertified: regEmergency,
+        verificationPathway: credentialDocType,
+        mentorArtisanName: endorsingSocietyOrMentor,
+        experienceYears: Number(experienceYears) || 0,
         area: regArea.trim() || location?.area || 'Pune Central',
         city: regCity.trim() || location?.city || 'Pune',
         lat: location?.lat ?? 18.5204,
@@ -988,25 +1056,44 @@ export const WorkerAuth: React.FC<WorkerAuthProps> = ({
                     </div>
                   </div>
 
-                  {/* Trade Qualification & Licensing */}
-                  <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200 space-y-3">
-                    <div className="font-bold text-slate-800 text-xs flex items-center gap-2">
-                      <Award className="w-4 h-4 text-teal-700" />
-                      <span>2. Trade Qualification / Vocational Credential</span>
+                  {/* Trade Qualification & Verification Pathways */}
+                  <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200 space-y-4">
+                    <div className="flex items-center justify-between">
+                      <div className="font-bold text-slate-800 text-xs flex items-center gap-2">
+                        <Award className="w-4 h-4 text-teal-700" />
+                        <span>2. Trade Verification Pathway</span>
+                      </div>
+                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-teal-100 text-teal-800 border border-teal-200">
+                        Inclusive Onboarding
+                      </span>
                     </div>
 
                     <div>
-                      <label className="block font-bold text-slate-700 mb-1">Qualification Category *</label>
+                      <label className="block font-bold text-slate-700 mb-1">Select Your Qualification Pathway *</label>
                       <select
                         value={credentialDocType}
                         onChange={(e) => {
-                          setCredentialDocType(e.target.value);
-                          const matched = CREDENTIAL_DOCUMENT_TYPES.find((d) => d.id === e.target.value);
+                          const val = e.target.value;
+                          setCredentialDocType(val);
+                          const matched = CREDENTIAL_DOCUMENT_TYPES.find((d) => d.id === val);
                           if (matched) {
                             setRegIssuingBody(matched.authority);
                           }
+                          if (val === 'practical_experience') {
+                            setRegCertTitle(`${experienceYears}Y Field Practitioner (${regSkill})`);
+                            setRegCertNumber(`EXP-${regSkill.slice(0, 3).toUpperCase()}-${Math.floor(1000 + Math.random() * 9000)}`);
+                          } else if (val === 'coop_peer_endorsement') {
+                            setRegCertTitle(`Guild Endorsed ${regSkill} Artisan`);
+                            setRegCertNumber(`GUILD-${regSkill.slice(0, 3).toUpperCase()}-${Math.floor(1000 + Math.random() * 9000)}`);
+                          } else if (val === 'provisional_apprentice') {
+                            setRegCertTitle(`Provisional Member — Supervised ${regSkill} Field Apprentice`);
+                            setRegCertNumber(`PROV-${regSkill.slice(0, 3).toUpperCase()}-${Math.floor(1000 + Math.random() * 9000)}`);
+                          } else {
+                            setRegCertTitle(`${regSkill} Certified Artisan`);
+                            setRegCertNumber(`COOP-${regSkill.slice(0, 2).toUpperCase()}-${Math.floor(10000 + Math.random() * 90000)}`);
+                          }
                         }}
-                        className="w-full px-3 py-2 rounded-xl border border-slate-300 text-xs bg-white text-slate-900"
+                        className="w-full px-3 py-2.5 rounded-xl border border-slate-300 text-xs bg-white text-slate-900 font-semibold focus:ring-2 focus:ring-teal-500"
                       >
                         {CREDENTIAL_DOCUMENT_TYPES.map((d) => (
                           <option key={d.id} value={d.id}>
@@ -1014,64 +1101,234 @@ export const WorkerAuth: React.FC<WorkerAuthProps> = ({
                           </option>
                         ))}
                       </select>
+                      <p className="text-[11px] text-slate-500 mt-1.5 leading-relaxed">
+                        {CREDENTIAL_DOCUMENT_TYPES.find((d) => d.id === credentialDocType)?.description}
+                      </p>
                     </div>
 
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                      <div>
-                        <label className="block font-bold text-slate-700 mb-1">Certificate / License Title *</label>
-                        <input
-                          type="text"
-                          value={regCertTitle}
-                          onChange={(e) => setRegCertTitle(e.target.value)}
-                          placeholder="e.g. NCVT National Trade Certificate"
-                          className="w-full px-3 py-2 rounded-xl border border-slate-300 text-xs bg-white text-slate-900"
-                        />
+                    {/* PATHWAY 1: Practical Experience (No paper certificate required) */}
+                    {credentialDocType === 'practical_experience' && (
+                      <div className="p-3.5 rounded-xl bg-amber-50/80 border border-amber-200 space-y-3">
+                        <div className="flex items-start gap-2.5">
+                          <BookOpen className="w-4 h-4 text-amber-700 shrink-0 mt-0.5" />
+                          <div>
+                            <div className="font-bold text-amber-900 text-xs">Informal Master Artisan / Trade Experience Pathway</div>
+                            <div className="text-[11px] text-amber-800 mt-0.5">
+                              No formal ITI diploma or paper license required. Your trade credibility is verified via documented years on the job, your Aadhaar/e-Shram card, and the in-app Indian Standards (IS) competency check in Step 3.
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+                          <div>
+                            <label className="block font-bold text-slate-700 mb-1">Years of Practical Trade Experience *</label>
+                            <input
+                              type="number"
+                              min={1}
+                              max={45}
+                              value={experienceYears}
+                              onChange={(e) => {
+                                const val = Number(e.target.value);
+                                setExperienceYears(val);
+                                setRegCertTitle(`${val}Y Field Practitioner (${regSkill})`);
+                              }}
+                              className="w-full px-3 py-2 rounded-xl border border-slate-300 text-xs bg-white text-slate-900 font-bold"
+                            />
+                          </div>
+                          <div>
+                            <label className="block font-bold text-slate-700 mb-1">Previous Work Style / Background</label>
+                            <select
+                              value={regIssuingBody}
+                              onChange={(e) => setRegIssuingBody(e.target.value)}
+                              className="w-full px-3 py-2 rounded-xl border border-slate-300 text-xs bg-white text-slate-900"
+                            >
+                              <option value="Independent Local Neighborhood Craftsman">Independent Local Neighborhood Craftsman</option>
+                              <option value="Contractor / Site Apprentice Trainee">Contractor / Site Apprentice Trainee</option>
+                              <option value="Family Heritage Trade Practitioner">Family Heritage Trade Practitioner</option>
+                              <option value="Shop / Workshop Senior Assistant">Shop / Workshop Senior Assistant</option>
+                            </select>
+                          </div>
+                        </div>
+
+                        <label className="flex items-start gap-2 pt-1 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={practicalSelfAttested}
+                            onChange={(e) => setPracticalSelfAttested(e.target.checked)}
+                            className="w-4 h-4 text-teal-600 rounded border-slate-300 focus:ring-teal-500 mt-0.5"
+                          />
+                          <span className="text-[11px] text-slate-700 font-medium">
+                            I solemnly self-attest that I have actively worked in the <strong>{regSkill}</strong> trade for <strong>{experienceYears}+ years</strong>, understand electrical/mechanical safety, and commit to following cooperative quality standards.
+                          </span>
+                        </label>
                       </div>
+                    )}
 
-                      <div>
-                        <label className="block font-bold text-slate-700 mb-1">Registration / Roll No. *</label>
-                        <input
-                          type="text"
-                          value={regCertNumber}
-                          onChange={(e) => setRegCertNumber(e.target.value)}
-                          placeholder="e.g. ITI-2024-MH-8921"
-                          className="w-full px-3 py-2 rounded-xl border border-slate-300 text-xs bg-white text-slate-900 font-mono"
-                        />
+                    {/* PATHWAY 2: Peer / Cooperative Guild Endorsement */}
+                    {credentialDocType === 'coop_peer_endorsement' && (
+                      <div className="p-3.5 rounded-xl bg-teal-50/80 border border-teal-200 space-y-3">
+                        <div className="flex items-start gap-2.5">
+                          <Users className="w-4 h-4 text-teal-700 shrink-0 mt-0.5" />
+                          <div>
+                            <div className="font-bold text-teal-950 text-xs">Primary Society or Senior Master Craftsman Endorsement</div>
+                            <div className="text-[11px] text-teal-800 mt-0.5">
+                              If you lack a college diploma, a certified senior artisan or registered cooperative guild in your taluka/district can vouch for your integrity and trade proficiency.
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+                          <div>
+                            <label className="block font-bold text-slate-700 mb-1">Endorsing Cooperative Society / Guild Name *</label>
+                            <input
+                              type="text"
+                              value={endorsingSocietyOrMentor}
+                              onChange={(e) => {
+                                setEndorsingSocietyOrMentor(e.target.value);
+                                setRegIssuingBody(e.target.value);
+                              }}
+                              placeholder="e.g. Pune Central Urban Artisan Guild Society"
+                              className="w-full px-3 py-2 rounded-xl border border-slate-300 text-xs bg-white text-slate-900"
+                            />
+                          </div>
+                          <div>
+                            <label className="block font-bold text-slate-700 mb-1">Vouching Senior Artisan / Secretary Phone</label>
+                            <input
+                              type="text"
+                              value={mentorPhone}
+                              onChange={(e) => setMentorPhone(e.target.value)}
+                              placeholder="e.g. +91 98220 12345"
+                              className="w-full px-3 py-2 rounded-xl border border-slate-300 text-xs bg-white text-slate-900 font-mono"
+                            />
+                          </div>
+                        </div>
+
+                        <div>
+                          <label className="block font-bold text-slate-700 mb-1">Society Recommendation Letter / Endorsement Stamp (Optional)</label>
+                          <div className="border-2 border-dashed border-teal-300 hover:border-teal-500 rounded-xl p-3 text-center bg-white transition cursor-pointer relative">
+                            <input
+                              type="file"
+                              accept=".pdf,.png,.jpg,.jpeg"
+                              onChange={(e) => {
+                                if (e.target.files && e.target.files[0]) {
+                                  setUploadedFileName(e.target.files[0].name);
+                                }
+                              }}
+                              className="absolute inset-0 opacity-0 cursor-pointer"
+                            />
+                            <UploadCloud className="w-5 h-5 text-teal-600 mx-auto mb-1" />
+                            <p className="font-bold text-slate-800 text-xs">
+                              {uploadedFileName ? `Attached: ${uploadedFileName}` : 'Attach Society Letter or Guild Stamp (Optional)'}
+                            </p>
+                            <p className="text-[10px] text-slate-400">PDF, JPG up to 10MB • Cooperative society verification</p>
+                          </div>
+                        </div>
                       </div>
-                    </div>
+                    )}
 
-                    <div>
-                      <label className="block font-bold text-slate-700 mb-1">Issuing Authority / Board *</label>
-                      <input
-                        type="text"
-                        value={regIssuingBody}
-                        onChange={(e) => setRegIssuingBody(e.target.value)}
-                        placeholder="e.g. Directorate General of Training (DGT / NCVT)"
-                        className="w-full px-3 py-2 rounded-xl border border-slate-300 text-xs bg-white text-slate-900"
-                      />
-                    </div>
+                    {/* PATHWAY 3: Provisional Member / Supervised Trial */}
+                    {credentialDocType === 'provisional_apprentice' && (
+                      <div className="p-3.5 rounded-xl bg-blue-50/80 border border-blue-200 space-y-3">
+                        <div className="flex items-start gap-2.5">
+                          <Compass className="w-4 h-4 text-blue-700 shrink-0 mt-0.5" />
+                          <div>
+                            <div className="font-bold text-blue-950 text-xs">Provisional Member & Supervised Field Trial Route</div>
+                            <div className="text-[11px] text-blue-800 mt-0.5">
+                              Start working immediately as a Provisional Member. You will be paired with a certified senior craftsman for your first 5 bookings. Once you complete 5 jobs with 4.5+ star ratings, your profile is automatically upgraded to full Certified status.
+                            </div>
+                          </div>
+                        </div>
 
-                    {/* Document Upload Attachment */}
-                    <div>
-                      <label className="block font-bold text-slate-700 mb-1">Credential Document Upload / Scan *</label>
-                      <div className="border-2 border-dashed border-slate-300 hover:border-teal-500 rounded-2xl p-4 text-center bg-white transition cursor-pointer relative">
-                        <input
-                          type="file"
-                          accept=".pdf,.png,.jpg,.jpeg"
-                          onChange={(e) => {
-                            if (e.target.files && e.target.files[0]) {
-                              setUploadedFileName(e.target.files[0].name);
-                            }
-                          }}
-                          className="absolute inset-0 opacity-0 cursor-pointer"
-                        />
-                        <UploadCloud className="w-6 h-6 text-teal-600 mx-auto mb-1.5" />
-                        <p className="font-bold text-slate-800 text-xs mb-0.5">
-                          {uploadedFileName ? `Attached: ${uploadedFileName}` : 'Click or Drag & Drop Trade Certificate'}
-                        </p>
-                        <p className="text-[10px] text-slate-500">PDF, JPG, PNG up to 10MB • Cooperative Encryption Enabled</p>
+                        <div className="p-3 rounded-xl bg-white border border-blue-200 space-y-1.5">
+                          <div className="flex items-center justify-between text-[11px]">
+                            <span className="text-slate-600">Trial Period Jobs Required:</span>
+                            <span className="font-bold text-slate-900">5 Supervised Dispatches</span>
+                          </div>
+                          <div className="flex items-center justify-between text-[11px]">
+                            <span className="text-slate-600">Minimum Rating to Graduate:</span>
+                            <span className="font-bold text-emerald-700">4.5 / 5.0 Stars</span>
+                          </div>
+                          <div className="flex items-center justify-between text-[11px]">
+                            <span className="text-slate-600">Worker Payout during Trial:</span>
+                            <span className="font-bold text-slate-900">Full 90% Direct Pay + Insurance</span>
+                          </div>
+                        </div>
+
+                        <label className="flex items-start gap-2 pt-1 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={provisionalTrialConsent}
+                            onChange={(e) => setProvisionalTrialConsent(e.target.checked)}
+                            className="w-4 h-4 text-blue-600 rounded border-slate-300 focus:ring-blue-500 mt-0.5"
+                          />
+                          <span className="text-[11px] text-slate-700 font-medium">
+                            I accept the Provisional Membership conditions and agree to co-dispatch with senior guild artisans during my initial 5 trial service visits.
+                          </span>
+                        </label>
                       </div>
-                    </div>
+                    )}
+
+                    {/* PATHWAY 4: Formal Certificate Upload (ITI, Wireman, NSDC, Safety clearance) */}
+                    {!['practical_experience', 'coop_peer_endorsement', 'provisional_apprentice'].includes(credentialDocType) && (
+                      <div className="space-y-3 pt-1">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                          <div>
+                            <label className="block font-bold text-slate-700 mb-1">Certificate / License Title *</label>
+                            <input
+                              type="text"
+                              value={regCertTitle}
+                              onChange={(e) => setRegCertTitle(e.target.value)}
+                              placeholder="e.g. NCVT National Trade Certificate"
+                              className="w-full px-3 py-2 rounded-xl border border-slate-300 text-xs bg-white text-slate-900"
+                            />
+                          </div>
+
+                          <div>
+                            <label className="block font-bold text-slate-700 mb-1">Registration / Roll No. *</label>
+                            <input
+                              type="text"
+                              value={regCertNumber}
+                              onChange={(e) => setRegCertNumber(e.target.value)}
+                              placeholder="e.g. ITI-2024-MH-8921"
+                              className="w-full px-3 py-2 rounded-xl border border-slate-300 text-xs bg-white text-slate-900 font-mono"
+                            />
+                          </div>
+                        </div>
+
+                        <div>
+                          <label className="block font-bold text-slate-700 mb-1">Issuing Authority / Board *</label>
+                          <input
+                            type="text"
+                            value={regIssuingBody}
+                            onChange={(e) => setRegIssuingBody(e.target.value)}
+                            placeholder="e.g. Directorate General of Training (DGT / NCVT)"
+                            className="w-full px-3 py-2 rounded-xl border border-slate-300 text-xs bg-white text-slate-900"
+                          />
+                        </div>
+
+                        {/* Document Upload Attachment */}
+                        <div>
+                          <label className="block font-bold text-slate-700 mb-1">Credential Document Upload / Scan *</label>
+                          <div className="border-2 border-dashed border-slate-300 hover:border-teal-500 rounded-2xl p-4 text-center bg-white transition cursor-pointer relative">
+                            <input
+                              type="file"
+                              accept=".pdf,.png,.jpg,.jpeg"
+                              onChange={(e) => {
+                                if (e.target.files && e.target.files[0]) {
+                                  setUploadedFileName(e.target.files[0].name);
+                                }
+                              }}
+                              className="absolute inset-0 opacity-0 cursor-pointer"
+                            />
+                            <UploadCloud className="w-6 h-6 text-teal-600 mx-auto mb-1.5" />
+                            <p className="font-bold text-slate-800 text-xs mb-0.5">
+                              {uploadedFileName ? `Attached: ${uploadedFileName}` : 'Click or Drag & Drop Trade Certificate'}
+                            </p>
+                            <p className="text-[10px] text-slate-500">PDF, JPG, PNG up to 10MB • Cooperative Encryption Enabled</p>
+                          </div>
+                        </div>
+                      </div>
+                    )}
                   </div>
 
                   {/* Digital Seal Code Preview */}
@@ -1134,6 +1391,66 @@ export const WorkerAuth: React.FC<WorkerAuthProps> = ({
                       Answer the 3 mandatory trade competency questions below. Verified answers certify adherence to Indian Standard (IS) safety protocols and earn your Cooperative Verified Badge.
                     </p>
                   </div>
+
+                  {/* Accessible Voice & Visual Mode Banner / Switcher */}
+                  <div className="p-3 rounded-2xl bg-teal-50 border border-teal-200 flex flex-wrap items-center justify-between gap-3">
+                    <div className="flex items-center gap-2.5">
+                      <span className="p-2 rounded-xl bg-teal-700 text-white shadow-xs">
+                        <Volume2 className="w-4 h-4" />
+                      </span>
+                      <div>
+                        <div className="font-bold text-teal-950 text-xs flex items-center gap-1.5">
+                          <span>Difficulty reading text or want voice guidance?</span>
+                          <span className="text-[10px] px-1.5 py-0.2 rounded bg-amber-200 text-amber-900 font-extrabold">Accessible</span>
+                        </div>
+                        <div className="text-[11px] text-teal-800">
+                          Switch to spoken audio prompts (मराठी/हिंदी/EN), visual pictures, or Sanstha Sahayak verification.
+                        </div>
+                      </div>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => setUseAccessibleVoiceMode(!useAccessibleVoiceMode)}
+                      className={`px-3 py-1.5 rounded-xl font-bold text-xs transition shadow-xs cursor-pointer flex items-center gap-1.5 ${
+                        useAccessibleVoiceMode
+                          ? 'bg-slate-900 text-white hover:bg-slate-800'
+                          : 'bg-teal-700 text-white hover:bg-teal-800'
+                      }`}
+                    >
+                      {useAccessibleVoiceMode ? (
+                        <>
+                          <FileText className="w-3.5 h-3.5" />
+                          <span>Standard Text Test</span>
+                        </>
+                      ) : (
+                        <>
+                          <Volume2 className="w-3.5 h-3.5" />
+                          <span>Open Voice & Picture Mode</span>
+                        </>
+                      )}
+                    </button>
+                  </div>
+
+                  {/* Accessible Voice & Visual Quiz Modal/Inline View */}
+                  {useAccessibleVoiceMode ? (
+                    <div className="pt-2">
+                      <AccessibleSkillQuiz
+                        trade={regSkill}
+                        workerName={regName || 'Artisan'}
+                        initialLang="hi"
+                        onComplete={(score, passed) => {
+                          setAccessibleScoreOverride(score);
+                          if (passed) {
+                            setSafetyPledgeChecked(true);
+                          }
+                          setUseAccessibleVoiceMode(false);
+                        }}
+                        onCancel={() => setUseAccessibleVoiceMode(false)}
+                      />
+                    </div>
+                  ) : (
+                    <>
 
                   {/* Questions List */}
                   <div className="space-y-3.5">
@@ -1234,6 +1551,9 @@ export const WorkerAuth: React.FC<WorkerAuthProps> = ({
                       <CheckCircle2 className="w-4 h-4 text-emerald-700 shrink-0" />
                       <span>Competency Cleared: {scorePercentage}% score qualifies for instant Cooperative Verified status!</span>
                     </div>
+                  )}
+
+                    </>
                   )}
 
                   {/* Action Buttons */}

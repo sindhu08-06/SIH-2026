@@ -708,6 +708,24 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       </span>
                     </div>
 
+                    {/* Verification Pathway Badge if non-traditional */}
+                    {worker.verificationPathway && (
+                      <div className="mt-3 flex items-center gap-2 flex-wrap text-[11px]">
+                        <span className="px-2 py-0.5 rounded-md bg-teal-100 text-teal-800 font-bold border border-teal-200">
+                          {worker.verificationPathway === 'practical_experience' ? '🛠️ Practical Experience' :
+                           worker.verificationPathway === 'coop_peer_endorsement' ? '🤝 Guild / Peer Endorsed' :
+                           worker.verificationPathway === 'provisional_apprentice' ? '🧭 Provisional Member' :
+                           worker.verificationPathway}
+                        </span>
+                        {worker.experienceYears ? (
+                          <span className="text-slate-600 font-semibold">{worker.experienceYears} Years Trade Exp.</span>
+                        ) : null}
+                        {worker.mentorArtisanName ? (
+                          <span className="text-teal-700 font-medium">Vouched by: {worker.mentorArtisanName}</span>
+                        ) : null}
+                      </div>
+                    )}
+
                     {/* Submitted Certifications list */}
                     <div className="mt-4 space-y-2">
                       <p className="text-xs font-bold text-slate-700 uppercase tracking-wider">
